@@ -18,3 +18,10 @@
 .idea/**/sqlDataSources.xml
 .idea/**/dynamic.xml
 .idea/**/uiDesigner.xml
+
+# Python files
+thoughts.py
+
+# Data
+
+Data/*
