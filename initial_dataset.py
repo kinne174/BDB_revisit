@@ -4,12 +4,13 @@ import glob
 import json
 from collections import namedtuple
 from string_to_xy import s2xy
+import pandas as pd
 
 # grab files with route labels from previous go through
 old_header = 'C:/Users/Mitch/Documents/UofM/Fall 2018/NFL/Data'
 all_plays_filename = os.path.join(old_header, 'plays.csv')
-all_plays = np.loadtxt(all_plays_filename, delimiter=',', skiprows=1)
 all_players_filename = os.path.join(old_header, 'players.csv')
+all_players = pd.read_csv(all_players_filename)
 
 def extract_info_from_routescsv(csv_filename):
     assert isinstance(csv_filename, str)
@@ -18,11 +19,12 @@ def extract_info_from_routescsv(csv_filename):
 
     route_info_dict = {}
 
-    first_underscore = csv_filename.find('_')
-    first_period = csv_filename.find('.')
-    gameId = csv_filename[first_underscore+1:first_period]
+    # first_underscore = csv_filename.find('_')
+    # first_period = csv_filename.find('.')
+    gameId = csv_sort_helper(csv_filename)
 
-    route_csv = np.loadtxt(csv_filename, delimiter=',', skiprows=1)
+    # route_csv = np.loadtxt(csv_filename, delimiter=',', skiprows=1)
+    route_csv = pd.read_csv(csv_filename)
 
     nflId = 0
     playId = 1
@@ -31,12 +33,12 @@ def extract_info_from_routescsv(csv_filename):
     route = 4
 
     for i in range(route_csv.shape[0]):
-        current_nflId = route_csv[i, nflId]
-        current_playId = route_csv[i, playId]
-        current_linestring = route_csv[i, LineString]
-        current_route = route_csv[i, route]
+        current_nflId = route_csv.iloc[i, nflId]
+        current_playId = route_csv.iloc[i, playId]
+        current_linestring = route_csv.iloc[i, LineString]
+        current_route = route_csv.iloc[i, route]
 
-        current_uniqueID = '-'.join([gameId, current_playId, current_nflId])
+        current_uniqueID = '-'.join([str(gameId), str(current_playId), str(current_nflId)])
 
         route_info_dict[current_uniqueID] = routesDoc(gameId=gameId, playId=current_playId, nflId=current_nflId,
                                                       routeLabel=current_route, lineString=current_linestring)
@@ -52,14 +54,16 @@ def extract_info_from_json(json_filename):
 
     with open(json_filename, 'r') as json_file:
         current_play_list = json.load(json_file)
-        gameId = current_play_list[0]['gameId']
+        gameId = json_sort_helper(json_filename)
 
         for i in range(len(current_play_list)):
             current_dict = current_play_list[i]
+            if len(current_dict) == 1:
+                continue
 
             current_playId = current_dict['playId']
-            for j in range(len(current_dict['all receivers'])):
-                current_receiver = current_dict['all receivers'][j]
+            for j in range(len(current_dict['all_receivers'])):
+                current_receiver = current_dict['all_receivers'][j]
 
                 current_left = current_receiver[2] > 0 # positive number here means to the left so left of ball is true if this is positive
                 current_intendend = bool(current_receiver[4])
@@ -68,7 +72,7 @@ def extract_info_from_json(json_filename):
                 current_height = current_receiver[5]
                 current_weight = current_receiver[6]
 
-                current_uniqueId = '-'.join([gameId, current_playId, j])
+                current_uniqueId = '-'.join([str(gameId), str(current_playId), str(j)])
                 player_info_dict[current_uniqueId] = playerDoc(gameId=gameId, playId=current_playId,
                                                                leftOfBall=current_left, intended=current_intendend,
                                                                position=current_position, routeLabel=current_routeLabel,
@@ -77,7 +81,7 @@ def extract_info_from_json(json_filename):
     return player_info_dict
 
 
-def extract_info_from_(csv_filename, json_filename, all_plays):
+def extract_info_from_(csv_filename, json_filename, all_players):
     # output dict with keys-> unique Ids and values-> namedtuple(gameId, playId, nflId, position, leftOrRight, routeLabel, intended, Linestring)
 
     # before entering assert that the gameIds are the same
@@ -86,10 +90,10 @@ def extract_info_from_(csv_filename, json_filename, all_plays):
 
     # all_plays = np.loadtxt(all_plays_filename, delimiter=',', skiprows=1)
 
-    nflId = 0
-    PositionAbbr = 3
-    Height_cm = 10
-    Weight = 8
+    # nflId = 0
+    # PositionAbbr = 3
+    # Height_cm = 10
+    # Weight = 8
 
     outDoc = namedtuple('outDoc', 'gameId playId nflId position leftOfBall routeLabel intended lineString')
     out_dict = {}
@@ -99,20 +103,22 @@ def extract_info_from_(csv_filename, json_filename, all_plays):
     all_route_playIds = sorted(np.unique([val.playId for val in route_dict.values()]))
     all_player_playIds = sorted(np.unique([val.playId for val in player_dict.values()]))
 
-    assert len(all_route_playIds) == len(all_player_playIds)
-    assert all([rId == pId for rId, pId in zip(all_route_playIds, all_player_playIds)])
+    # assert len(all_route_playIds) == len(all_player_playIds)
+    # assert all([rId == pId for rId, pId in zip(all_route_playIds, all_player_playIds)])
+
+    assert all([pId in all_route_playIds for pId in all_player_playIds])
 
     lookup_height = {}
     lookup_weight = {}
 
-    for playId in all_route_playIds:
+    for playId in all_player_playIds:
         # current_r_heights = []
         # current_r_weights = []
         current_p_heights = []
         current_p_weights = []
 
-        current_player_keys = [k for v,k in player_dict if v.playId == playId]
-        current_route_keys = [k for v,k in route_dict if v.playId == playId]
+        current_player_keys = [k for k, v in player_dict.items() if v.playId == playId]
+        current_route_keys = [k for k, v in route_dict.items() if v.playId == playId]
 
         # go through each of these and see which ones match up based on nflId of player_dict and height/weight/position
         # of route_dict, then combine relevant areas into one uniqueId key and output that to be added to the new dataset
@@ -128,23 +134,46 @@ def extract_info_from_(csv_filename, json_filename, all_plays):
                 current_r_weight = lookup_weight[crk_nflId]
             else:
                 # find the height and weight of nflId within all_plays
-                temp_height = all_plays[np.where(all_plays[:, nflId]) == crk_nflId, Height_cm]
-                temp_weight = all_plays[np.where(all_plays[:, nflId]) == crk_nflId, Weight]
+                # temp_height = all_players.iloc[np.where(all_players.iloc[:, nflId] == crk_nflId), Height_cm]
+                # temp_weight = all_players.iloc[np.where(all_players.iloc[:, nflId] == crk_nflId), Weight]
 
-                current_r_height = temp_height
-                current_r_weight = temp_weight
+                current_r_height = float(all_players.loc[all_players['nflId'] == crk_nflId, 'Height_cm'])
+                current_r_weight = float(all_players.loc[all_players['nflId'] == crk_nflId, 'Weight'])
 
-                lookup_height[crk_nflId] = temp_height
-                lookup_weight[crk_nflId] = temp_weight
+                # current_r_height = temp_height
+                # current_r_weight = temp_weight
 
-            height_index = current_p_heights.index(current_r_height)
-            weight_index = current_p_weights.index(current_r_height)
+                lookup_height[crk_nflId] = current_r_height
+                lookup_weight[crk_nflId] = current_r_weight
 
-            assert height_index == weight_index
+            all_heights, = np.where(np.array(current_p_heights) == current_r_height)
+            all_weights, = np.where(np.array(current_p_weights) == current_r_weight)
 
-            current_p_key = current_player_keys[height_index]
+            assert len(all_heights) > 0
+            assert len(all_weights) > 0
 
-            out_gameId = route_dict[crk].gameId
+            if len(all_heights) == 1 and len(all_weights) == 1:
+                current_p_key = current_player_keys[int(all_heights)]
+            else:
+                intersecting_index = set(all_heights).intersection(set(all_weights))
+                if len(intersecting_index) > 1:
+                    # do something here to randomize selection
+                    intersecting_index = [list(intersecting_index)[np.random.randint(low=0,
+                                                                                        high=len(intersecting_index))]]
+
+                assert len(intersecting_index) == 1
+
+                current_p_key = current_player_keys[int(list(intersecting_index)[0])]
+
+            # height_index = current_p_heights.index(current_r_height)
+            # weight_index = current_p_weights.index(current_r_weight)
+            #
+            # if height_index == weight_index:
+            #     current_p_key = current_player_keys[height_index]
+            # else:
+
+
+            out_gameId = int(route_dict[crk].gameId)
             out_playId = route_dict[crk].playId
             out_nflId = crk_nflId
             out_position = player_dict[current_p_key].position
@@ -172,7 +201,7 @@ def json_sort_helper(x):
     first_underscore = x.find('_')
     first_period = x.find('.')
     second_underscore = x[first_underscore+1:].find('_')
-    gameId = x[second_underscore+1:first_period]
+    gameId = x[first_underscore+1+second_underscore+1:first_period]
     return gameId
 
 # create a dictionary to keep track of individual game-play-player information using the unique Id based on the
@@ -180,6 +209,7 @@ def json_sort_helper(x):
 
 game_play_player_dict = {}
 lookup_filename = 'Data/lookup.csv'
+lookup_filename_temp = 'Data/lookup_temp.csv'
 lineString_dict = {}
 linesString_filename = 'Data/lineStrings.csv'
 
@@ -202,28 +232,34 @@ assert len(routes_filenames) == len(json_filenames)
 routes_filenames.sort(key=csv_sort_helper)
 json_filenames.sort(key=json_sort_helper)
 
-assert all([jf == rf for jf, rf in zip(json_filenames, routes_filenames)])
+for rf, jf in zip(routes_filenames, json_filenames):
+    gameId_rf = csv_sort_helper(rf)
+    gameId_jf = json_sort_helper(jf)
+    assert gameId_rf == gameId_jf
+
+# assert all([json_sort_helper(jf) == csv_sort_helper(rf) for jf, rf in zip(json_filenames, routes_filenames)])
 
 # need a way in here to start and stop depending on where the file is
-uniqueId = 0
+# uniqueId = 0
 gameId = 1
-playId = 2
-nflId = 3
-position = 4
-leftOfBall = 5
-routeLabel = 6
-intended = 7
+# playId = 2
+# nflId = 3
+# position = 4
+# leftOfBall = 5
+# routeLabel = 6
+# intended = 7
 
 for jf, rf in zip(json_filenames, routes_filenames):
-    lookup_file = np.loadtxt(lookup_filename, delimiter=',', skiprows=1)
+    # lookup_file = np.loadtxt(lookup_filename, delimiter=',', skiprows=1)
+    lookup_file = pd.read_csv(lookup_filename)
     if not lookup_file.shape[0] == 0:
-        recorded_gameIds = np.unique(lookup_file[:, gameId])
+        recorded_gameIds = np.unique(lookup_file.iloc[:, gameId])
 
-        current_gameId = json_sort_helper(jf)
+        current_gameId = int(json_sort_helper(jf))
         if current_gameId in recorded_gameIds:
             continue
 
-    current_dict = extract_info_from_(rf, jf, all_plays)
+    current_dict = extract_info_from_(rf, jf, all_players)
 
     temp_append = np.array([[k, v.gameId, v.playId, v.nflId, v.position, v.leftOfBall, v.routeLabel, v.intended]
                             for k,v in current_dict.items()])
@@ -232,12 +268,9 @@ for jf, rf in zip(json_filenames, routes_filenames):
 
     new_lookup = np.append(lookup_file, temp_append, axis=0)
 
-    np.savetxt(fname=lookup_filename, X=new_lookup, delimiter=',',
-               header='uniqueId,gameId,playId,nflId,position,leftOfBall,routeLabel,intended', comments='')
-
 
     # save to the linestrings file the xy pairs
-    linesString_file = np.loadtxt(linesString_filename, delimiter=',', skiprows=1)
+    linesString_file = pd.read_csv(linesString_filename)
 
     current_lineStrings = []
     for k, v in current_dict.items():
@@ -251,7 +284,10 @@ for jf, rf in zip(json_filenames, routes_filenames):
 
     new_lineString = np.append(linesString_file, temp_append, axis=0)
 
-    np.savetxt(fname=linesString_filename, X=new_lineString, delimiter=',',
+    np.savetxt(fname=lookup_filename, X=new_lookup, delimiter=',', fmt='%s',
+               header='uniqueId,gameId,playId,nflId,position,leftOfBall,routeLabel,intended', comments='')
+
+    np.savetxt(fname=linesString_filename, X=new_lineString, delimiter=',', fmt = '%s',
                header='uniqueId,x,y,timestep', comments='')
 
 # probably come back to this later, see if I can do something with just the pass plays for now, can work on
