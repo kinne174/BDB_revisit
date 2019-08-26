@@ -22,6 +22,5 @@
 # Python files
 thoughts.py
 
-# Data
-
-Data/*
+# R files
+ggplot2_tutorial.R

@@ -88,13 +88,32 @@ while (length(oneLine <- readLines(con, n = 1)) > 0) {
 } 
 close(con)
 
-out_tibble = tibble(all_gameIds, offense_lineStrings_indices, defense_lineStrings_indices, offense_lookup_indices, defense_lookup_indices)
+ball_filename = 'C:/Users/Mitch/PycharmProjects/BDB_revisit/Data/ball_lineStrings.csv'
+
+all_gameIds = c()
+ball_indices = c()
+
+con  <- file(ball_filename, open = "r")
+i = 0
+while (length(oneLine <- readLines(con, n = 1)) > 0) {
+  myLine <- unlist((strsplit(oneLine, ",")))
+  if (i == 0){
+    header = myLine
+  }else{
+    current_gameId = substr(myLine[1], 1, 10)
+    if (!(current_gameId %in% all_gameIds)) {
+      all_gameIds = append(all_gameIds, current_gameId)
+      ball_indices = append(ball_indices, i)
+    }
+  }
+  i = i + 1
+} 
+close(con)
+
+out_tibble = tibble(all_gameIds, offense_lineStrings_indices, defense_lineStrings_indices, offense_lookup_indices, defense_lookup_indices, ball_indices)
 
 gameId2row_filename = 'C:/Users/Mitch/PycharmProjects/BDB_revisit/Data/gameId2row.csv'
 write_csv(out_tibble, gameId2row_filename)
-
-
-
 
 
 
