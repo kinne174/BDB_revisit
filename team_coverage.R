@@ -5,6 +5,7 @@ source('C:/Users/Mitch/PycharmProjects/BDB_revisit/load_files_helper_functions.R
 
 library(dplyr)
 library(ggplot2)
+library(ggforce)
 
 # give specific gameId and playId
 my_gameId = 2017091101
@@ -14,6 +15,13 @@ my_playId = 740
 individual_coverage_filename = 'C:/Users/Mitch/PycharmProjects/BDB_revisit/Data/individualCoverage.csv'
 individual_coverage = read_csv(individual_coverage_filename, col_types = cols())
 
+# load in player information for names
+players_filename = 'C:/Users/Mitch/Documents/UofM/Fall 2018/NFL/Data/players.csv'
+players = read_csv(players_filename)
+
+routes_filename = paste('C:/Users/Mitch/Documents/UofM/Fall 2018/NFL/Data/Routes_', my_gameId ,'.csv', sep = '')
+routes = read_csv(routes_filename)
+current_routes = routes[which(routes$playId == my_playId),]
 
 # load in same lineStrings as individual_coverage_active_learning.R
 # will just work with defense coverage guys and route runners
@@ -78,9 +86,9 @@ zone_positions = individual_coverage$position[zone_rows]
 
 # classify if they are deep/ middle/ close zone based on median depth from los
 zone_tibble = tibble(nflId = zone_nflIds, position = zone_positions, depth = NA, zx = NA, zy = NA, width_radius = NA, depth_radius = NA, color = NA)
-close_dist = c(0, 4)
+close_dist = c(-1, 4)
 middle_dist = c(4, 11)
-deep_dist = c(11, 20)
+deep_dist = c(11, 25)
 
 for(ni in zone_nflIds){
   play_xs = current_game_defense_lineStrings$x[which(current_game_defense_lineStrings$nflId_ == ni)]
@@ -105,6 +113,7 @@ close_split = c(0, 10, 53 + 1/3 - 10, 53 + 1/3)
 if(number_deep_safeties == 0){
   # no deep safeties - cover 0
   coverage_number = 'zero'
+  coverage_number_label = 0
   # no splits since this should be man across the board
   deep_split = c()
   middle_split = c()
@@ -113,10 +122,12 @@ if(number_deep_safeties == 0){
   # middle/deep cornerbacks zone -> cover 3 else cover 1
   if(number_deep_middle_cornerbacks >= 1){
     coverage_number = 'three'
+    coverage_number_label = 3
     deep_split = c(0, (53+1/3)/3, 2*(53+1/3)/3, 53+1/3)
     middle_split = c(0, (53+1/3)/4, (53+1/3)/2, 3*(53+1/3)/4, 53+1/3)
   }else{
     coverage_number = 'one'
+    coverage_number_label = 1
     deep_split = c((53+1/3)/4, 3*(53+1/3)/4)
     middle_split = (0:5 * rep(53+1/3, 6))/5
   }
@@ -125,10 +136,12 @@ if(number_deep_safeties == 0){
   # middle/deep cornerbacks zone -> cover 4 else cover 2
   if(number_deep_middle_cornerbacks >= 1){
     coverage_number = 'four'
+    coverage_number_label = 4
     deep_split = (0:4 * rep(53+1/3, 5))/4
     middle_split = (0:3 * rep(53+1/3, 4))/3
   }else{
     coverage_number = 'two'
+    coverage_number_label = 2
     deep_split = (0:2 * rep(53+1/3, 3))/2
     middle_split = (0:5 * rep(53+1/3, 6))/5
   }
@@ -163,6 +176,7 @@ for(i in 1:3){
   }
 }
 
+ball_sign = sign(los - current_game_ball_lineStrings$x[5])
 for(ni in zone_nflIds){
   current_xys = current_game_defense_lineStrings[which(current_game_defense_lineStrings$nflId_ == ni), c('x', 'y')]
   dist_array = array(data=NA, dim=c(nrow(zone_centersx), ncol(zone_centersx), nrow(current_xys)))
@@ -175,7 +189,7 @@ for(ni in zone_nflIds){
   }
   median_dists = apply(dist_array, c(1,2), median, na.rm = TRUE)
   min_index = which(median_dists == min(median_dists), arr.ind=T)
-  zone_tibble[which(zone_tibble$nflId == ni),]$zx = zone_centersx[min_index[1], min_index[2]]
+  zone_tibble[which(zone_tibble$nflId == ni),]$zx = los + ball_sign*zone_centersx[min_index[1], min_index[2]]
   zone_tibble[which(zone_tibble$nflId == ni),]$zy = zone_centersy[min_index[1], min_index[2]]
   
   # get radius by finding the minimum span of _split and _dist then dividing by 2
@@ -204,14 +218,14 @@ for(ni in zone_nflIds){
 }
 
 # expand for drawing
-zone_tibble_draw = tibble(nflId = current_game_defense_lineStrings$nflId_[which(current_game_defense_lineStrings$nflId_ %in% zone_nflIds)], position = current_game_defense_lineStrings$position[which(current_game_defense_lineStrings$nflId_ %in% zone_nflIds)], playerx = current_game_defense_lineStrings$x[which(current_game_defense_lineStrings$nflId_ %in% zone_nflIds)], playery = current_game_defense_lineStrings$y[which(current_game_defense_lineStrings$nflId_ %in% zone_nflIds)], zonex = NA, zoney = NA, timestep = current_game_defense_lineStrings$timestep[which(current_game_defense_lineStrings$nflId_ %in% zone_nflIds)], width_radius = NA, depth_radius = NA, color = NA)
+zone_tibble_draw = tibble(nflId = current_game_defense_lineStrings$nflId_[which(current_game_defense_lineStrings$nflId_ %in% zone_nflIds)], position = current_game_defense_lineStrings$position[which(current_game_defense_lineStrings$nflId_ %in% zone_nflIds)], playerx = current_game_defense_lineStrings$x[which(current_game_defense_lineStrings$nflId_ %in% zone_nflIds)], playery = current_game_defense_lineStrings$y[which(current_game_defense_lineStrings$nflId_ %in% zone_nflIds)], zonex = NA, zoney = NA, timestep = current_game_defense_lineStrings$timestep[which(current_game_defense_lineStrings$nflId_ %in% zone_nflIds)], width_radius = NA, depth_radius = NA, Color = NA)
 for(i in 1:nrow(zone_tibble_draw)){
   current_nflId = zone_tibble_draw$nflId[i]
-  zone_tibble_draw$zonex = zone_tibble$zx[which(zone_tibble$nflId == current_nflId)]
-  zone_tibble_draw$zoney = zone_tibble$zy[which(zone_tibble$nflId == current_nflId)]
-  zone_tibble_draw$width_radius = zone_tibble$width_radius[which(zone_tibble$nflId == current_nflId)]
-  zone_tibble_draw$depth_radius = zone_tibble$depth_radius[which(zone_tibble$nflId == current_nflId)]
-  zone_tibble_draw$color = zone_tibble$color[which(zone_tibble$nflId == current_nflId)]
+  zone_tibble_draw$zonex[i] = zone_tibble$zx[which(zone_tibble$nflId == current_nflId)]
+  zone_tibble_draw$zoney[i] = zone_tibble$zy[which(zone_tibble$nflId == current_nflId)]
+  zone_tibble_draw$width_radius[i] = zone_tibble$width_radius[which(zone_tibble$nflId == current_nflId)]
+  zone_tibble_draw$depth_radius[i] = zone_tibble$depth_radius[which(zone_tibble$nflId == current_nflId)]
+  zone_tibble_draw$Color[i] = zone_tibble$color[which(zone_tibble$nflId == current_nflId)]
 }
 
 # make a man tibble that has where the line segments should be, that is where the defender is and where the closest wide receiver is
@@ -272,20 +286,62 @@ blitz_tibble_draw = tibble(nflId = current_game_defense_lineStrings$nflId_[which
 for(i in 1:nrow(blitz_tibble_draw)){
   current_y = blitz_tibble_draw$arrow_basey[i]
   if(current_y <= .5*(53+1/3)){
-    blitz_tibble_draw[i,]$arrow_tipy = current_y + 2
+    blitz_tibble_draw[i,]$arrow_tipy = current_y + 3
   }else{
-    blitz_tibble_draw[i,]$arrow_tipy = current_y - 2
+    blitz_tibble_draw[i,]$arrow_tipy = current_y - 3
   }
   
   current_nflId = blitz_tibble_draw$nflId[i]
   current_xs = blitz_tibble_draw$arrow_basex[which(blitz_tibble_draw$nflId == current_nflId)]
   blitz_direction = sign(current_xs[1] - current_xs[6])
-  blitz_tibble_draw$arrow_tipx[i] = blitz_tibble_draw$arrow_basex[i] + 3*blitz_direction
+  blitz_tibble_draw$arrow_tipx[i] = blitz_tibble_draw$arrow_basex[i] - 4*blitz_direction
 }
 
 # draw man connecting line to closest receiver on average throughout play, blitz arrow, and zone where
 # players should be with a line connecting player to center of zone.
 
+# text df with nflId, position, lastName, route, x, y, timestep
+text_tibble = bind_rows(current_game_offense_lineStrings, current_game_defense_lineStrings) %>%
+  mutate(uniqueId = NULL) %>%
+  mutate(lastName = NA) %>%
+  mutate(route = '')
 
-animate_coverage = ggplot()
+for(i in 1:nrow(text_tibble)){
+  if(text_tibble$side[i] == 'offense'){
+    text_tibble$route[i] = current_routes$route[which(current_routes$nflId == text_tibble$nflId_[i])]
+  }
+  text_tibble$lastName[i] = players$LastName[which(players$nflId == text_tibble$nflId_[i])]
+}
+text_tibble$side = NULL
+
+text_animation = list(geom_label(data = text_tibble, aes(y, x, label=position, hjust=-.4)),
+  geom_label(data = text_tibble, aes(y, x, label=lastName, vjust=-.3)))
+  # geom_text(data = text_tibble, aes(y, x, label=route, hjust=-.4)))
+
+# man animation
+man_animation = geom_segment(data=man_tibble_draw, aes(x=defendery, y=defenderx, xend=offensey, yend=offensex))
+
+# blitz animation
+blitz_animation = geom_segment(data=blitz_tibble_draw, aes(x=arrow_basey, y=arrow_basex, xend=arrow_tipy, yend=arrow_tipx), arrow=arrow(), size=2, color="red")
+
+# zone animation
+zone_animation = list(geom_ellipse(data=zone_tibble_draw, aes(x0=zoney, y0=zonex, a=width_radius, b=depth_radius, angle=0, fill=Color, alpha=0.01), inherit.aes = F, show.legend = F), geom_segment(data=zone_tibble_draw, aes(x=playery, y=playerx, xend=zoney, yend=zonex), color=zone_tibble_draw$Color))
+
+merged_lineStrings = bind_rows(current_game_offense_lineStrings, current_game_defense_lineStrings, current_game_ball_lineStrings) %>%
+  mutate(position = NULL)
+
+animate_coverage = ggplot(merged_lineStrings, aes(y, x)) +
+  nfl_theme +
+  geom_hline(yintercept = los, colour = 'red', linetype = 'dashed') +
+  geom_point(size=4, aes(col=side)) +
+  scale_color_manual(values = c('brown', 'orange', 'navyblue')) +
+  man_animation +
+  blitz_animation +
+  zone_animation +
+  text_animation + 
+  transition_manual(timestep) +
+  labs(title = paste('GameId:', my_gameId, ' PlayId:', my_playId, ' Frame: {current_frame} Cover {coverage_number_label}'))
+animate_coverage
+
+anim_save(filename = 'example_coverage.gif')
 
